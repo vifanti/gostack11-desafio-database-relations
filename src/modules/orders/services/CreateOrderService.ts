@@ -20,13 +20,57 @@ interface IRequest {
 @injectable()
 class CreateOrderService {
   constructor(
+    @inject('OrdersRepository')
     private ordersRepository: IOrdersRepository,
+
+    @inject('ProductsRepository')
     private productsRepository: IProductsRepository,
+
+    @inject('CustomersRepository')
     private customersRepository: ICustomersRepository,
   ) {}
 
   public async execute({ customer_id, products }: IRequest): Promise<Order> {
-    // TODO
+    const customer = await this.customersRepository.findById(customer_id);
+
+    if (!customer) {
+      throw new AppError('Customer not found');
+    }
+
+    const foundProducts = await this.productsRepository.findAllById(products);
+
+    const orderedProducts = products.map(recivedProduct => {
+      const product = foundProducts.find(
+        foundProduct => foundProduct.id === recivedProduct.id,
+      );
+
+      if (!product) {
+        throw new AppError(
+          `O id ${recivedProduct.id} não foi encontrado no cadastro de produtos`,
+        );
+      }
+
+      if (product.quantity < recivedProduct.quantity) {
+        throw new AppError(
+          `Não há estoque suficiente para um ou mais produtos`,
+        );
+      }
+
+      return {
+        product_id: recivedProduct.id,
+        price: product.price,
+        quantity: recivedProduct.quantity,
+      };
+    });
+
+    const order = this.ordersRepository.create({
+      customer,
+      products: orderedProducts,
+    });
+
+    await this.productsRepository.updateQuantity(products);
+
+    return order;
   }
 }
 
